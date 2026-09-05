@@ -1,0 +1,233 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Read App Version
+        id: ver
+        shell: bash
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "App version: $VER"
+
+      - name: Ensure Project Structure
+        shell: bash
+        run: |
+          mkdir -p src/components src/lib
+          if [ -f "index.html" ]; then
+            sed -i 's|src="/main.tsx"|src="/src/main.tsx"|g' index.html
+            sed -i 's|src="main.tsx"|src="/src/main.tsx"|g' index.html
+          fi
+          if [ -f "main.tsx" ] && [ ! -f "src/main.tsx" ]; then mv main.tsx src/; fi
+          if [ -f "App.tsx" ] && [ ! -f "src/App.tsx" ]; then mv App.tsx src/; fi
+          if [ -f "index.css" ] && [ ! -f "src/index.css" ]; then mv index.css src/; fi
+          if [ -f "types.ts" ] && [ ! -f "src/types.ts" ]; then mv types.ts src/; fi
+          if [ -f "i18n.ts" ] && [ ! -f "src/lib/i18n.ts" ]; then mv i18n.ts src/lib/; fi
+          if [ -f "src/i18n.ts" ] && [ ! -f "src/lib/i18n.ts" ]; then mv src/i18n.ts src/lib/; fi
+          if [ -f "firebase.ts" ] && [ ! -f "src/lib/firebase.ts" ]; then mv firebase.ts src/lib/; fi
+          if [ -f "src/firebase.ts" ] && [ ! -f "src/lib/firebase.ts" ]; then mv src/firebase.ts src/lib/; fi
+          if [ -f "utils.ts" ] && [ ! -f "src/lib/utils.ts" ]; then mv utils.ts src/lib/; fi
+          if [ -f "src/utils.ts" ] && [ ! -f "src/lib/utils.ts" ]; then mv src/utils.ts src/lib/; fi
+          for f in *.tsx; do
+            if [ -f "$f" ] && [ "$f" != "main.tsx" ] && [ "$f" != "App.tsx" ]; then
+              mv "$f" src/components/
+            fi
+          done
+
+
+      - name: Sanitize text files (strip UTF-16 / null bytes)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          skip_dirs = {'node_modules', 'dist', 'dist_electron', '.git', 'android', 'ios', 'build'}
+          text_ext = {'.ts', '.tsx', '.js', '.cjs', '.mjs', '.json', '.html', '.css', '.md', '.svg', '.bat', '.yml', '.yaml', '.txt', '.d.ts'}
+          special = {'.gitignore', '.env.example', 'Dockerfile'}
+
+          def fix(path: Path):
+              raw = path.read_bytes()
+              if not raw:
+                  return False
+              if path.suffix.lower() not in text_ext and path.name not in special:
+                  # also fix files named tsconfig / vite without relying only on suffix
+                  if path.name not in ('tsconfig.json', 'package.json', 'capacitor.config.json', 'manifest.json', 'metadata.json'):
+                      if path.suffix.lower() not in text_ext:
+                          return False
+              text = None
+              if raw.startswith(b'\xff\xfe'):
+                  text = raw.decode('utf-16-le')
+              elif raw.startswith(b'\xfe\xff'):
+                  text = raw.decode('utf-16-be')
+              elif b'\x00' in raw:
+                  try:
+                      text = raw.decode('utf-16-le')
+                  except Exception:
+                      try:
+                          text = raw.decode('utf-16-be')
+                      except Exception:
+                          text = raw.replace(b'\x00', b'').decode('utf-8', errors='replace')
+              else:
+                  return False
+              if text.startswith('\ufeff'):
+                  text = text.lstrip('\ufeff')
+              text = text.replace('\r\n', '\n').replace('\r', '\n')
+              path.write_bytes(text.encode('utf-8'))
+              print('fixed', path)
+              return True
+
+          for root, dirs, files in os.walk('.'):
+              dirs[:] = [d for d in dirs if d not in skip_dirs]
+              for name in files:
+                  p = Path(root) / name
+                  try:
+                      fix(p)
+                  except Exception as e:
+                      print('skip', p, e)
+          # verify critical
+          for crit in ['tsconfig.json', 'vite.config.ts', 'package.json']:
+              b = Path(crit).read_bytes()
+              if b'\x00' in b:
+                  raise SystemExit(f'CRITICAL still corrupt: {crit}')
+              print(crit, 'OK', len(b), 'bytes')
+          PY
+
+      - name: Build Web Application
+        run: npm run build
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: gradle
+
+      - name: Add Capacitor Android Platform
+        run: |
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            npx cap init "Painite Work" "com.painite.work" --web-dir dist
+          fi
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          node generate-icons.js || true
+          npx cap sync android
+          # App display name + versionName/versionCode
+          VER="${{ steps.ver.outputs.version }}"
+          CODE=$(echo "$VER" | awk -F. '{print ($1*10000)+($2*100)+$3}')
+          if [ -f android/app/src/main/res/values/strings.xml ]; then
+            sed -i 's|<string name="app_name">.*</string>|<string name="app_name">Painite Work</string>|' android/app/src/main/res/values/strings.xml
+          fi
+          if [ -f android/app/build.gradle ]; then
+            sed -i "s/versionCode .*/versionCode ${CODE}/" android/app/build.gradle || true
+            sed -i "s/versionName \".*\"/versionName \"${VER}\"/" android/app/build.gradle || true
+          fi
+          if [ -f android/gradle.properties ]; then
+            grep -q 'internal.http.socketTimeout' android/gradle.properties || printf '%s\n' \
+              'systemProp.org.gradle.internal.http.connectionTimeout=180000' \
+              'systemProp.org.gradle.internal.http.socketTimeout=180000' \
+              'org.gradle.daemon=true' \
+              >> android/gradle.properties
+          fi
+
+      
+      - name: Patch Android WebView (3rd-party cookies for Inbox)
+        shell: bash
+        run: |
+          set +e
+          mkdir -p scripts
+          if [ ! -f scripts/patch-android-webview.js ]; then
+            echo "Writing patch script..."
+            cat > scripts/patch-android-webview.js << 'ENDJS'
+          const fs = require("fs");
+          const path = require("path");
+          function findMain(dir, d) {
+            if (d > 12 || !fs.existsSync(dir)) return null;
+            for (const name of fs.readdirSync(dir)) {
+              const full = path.join(dir, name);
+              let st; try { st = fs.statSync(full); } catch { continue; }
+              if (st.isDirectory()) {
+                if (["build",".gradle","node_modules"].includes(name)) continue;
+                const f = findMain(full, d + 1); if (f) return f;
+              } else if (name === "MainActivity.java" || name === "MainActivity.kt") return full;
+            }
+            return null;
+          }
+          const main = findMain(path.join(process.cwd(), "android", "app", "src", "main"), 0);
+          if (!main) { console.log("MainActivity not found — skip"); process.exit(0); }
+          let src = fs.readFileSync(main, "utf8");
+          if (src.includes("setAcceptThirdPartyCookies")) { console.log("already patched"); process.exit(0); }
+          const isKt = main.endsWith(".kt");
+          if (isKt) {
+            if (!src.includes("CookieManager")) {
+              src = src.replace(/(package [^\n]+\n)/, "$1\nimport android.webkit.CookieManager\nimport android.webkit.WebView\n");
+            }
+            const inj = "\n        try {\n            CookieManager.getInstance().setAcceptCookie(true)\n            val wv = this.bridge?.webView\n            if (wv != null) {\n                CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)\n                wv.settings.javaScriptEnabled = true\n                wv.settings.domStorageEnabled = true\n                wv.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW\n            }\n        } catch (_: Exception) { }\n";
+            src = src.replace(/(super\.onCreate\([^\)]*\)\s*\n)/, "$1" + inj);
+          } else {
+            if (!src.includes("CookieManager")) {
+              src = src.replace(/(package [^\n]+\n)/, "$1\nimport android.webkit.CookieManager;\nimport android.webkit.WebSettings;\nimport android.webkit.WebView;\n");
+            }
+            const inj = "\n        try {\n            CookieManager.getInstance().setAcceptCookie(true);\n            WebView wv = this.bridge.getWebView();\n            if (wv != null) {\n                CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true);\n                WebSettings s = wv.getSettings();\n                s.setJavaScriptEnabled(true);\n                s.setDomStorageEnabled(true);\n                s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);\n            }\n        } catch (Exception ignored) {}\n";
+            src = src.replace(/(super\.onCreate\([^\)]*\);\s*\n)/, "$1" + inj);
+          }
+          fs.writeFileSync(main, src);
+          console.log("patched", main);
+          ENDJS
+          fi
+          node scripts/patch-android-webview.js || true
+          echo "WebView patch step done"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-painite
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build Android APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+
+      - name: Rename APK
+        shell: bash
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          SRC="android/app/build/outputs/apk/debug/app-debug.apk"
+          OUT="Painite-Work-v${VER}.apk"
+          cp "$SRC" "$OUT"
+          ls -la "$OUT"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Painite-Work-v${{ steps.ver.outputs.version }}
+          path: Painite-Work-v${{ steps.ver.outputs.version }}.apk
