@@ -1,0 +1,152 @@
+name: Build Windows Application (EXE)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          rm -f package-lock.json
+          npm install --force
+          npm install @rollup/rollup-win32-x64-msvc lightningcss-win32-x64-msvc --no-save
+
+      - name: Ensure Project Structure
+        shell: bash
+        run: |
+          mkdir -p src/components src/lib build
+          if [ -f "index.html" ]; then
+            sed -i 's|src="/main.tsx"|src="/src/main.tsx"|g' index.html
+            sed -i 's|src="main.tsx"|src="/src/main.tsx"|g' index.html
+          fi
+          if [ -f "main.tsx" ] && [ ! -f "src/main.tsx" ]; then mv main.tsx src/; fi
+          if [ -f "App.tsx" ] && [ ! -f "src/App.tsx" ]; then mv App.tsx src/; fi
+          if [ -f "index.css" ] && [ ! -f "src/index.css" ]; then mv index.css src/; fi
+          if [ -f "types.ts" ] && [ ! -f "src/types.ts" ]; then mv types.ts src/; fi
+          if [ -f "i18n.ts" ] && [ ! -f "src/lib/i18n.ts" ]; then mv i18n.ts src/lib/; fi
+          if [ -f "src/i18n.ts" ] && [ ! -f "src/lib/i18n.ts" ]; then mv src/i18n.ts src/lib/; fi
+          if [ -f "firebase.ts" ] && [ ! -f "src/lib/firebase.ts" ]; then mv firebase.ts src/lib/; fi
+          if [ -f "src/firebase.ts" ] && [ ! -f "src/lib/firebase.ts" ]; then mv src/firebase.ts src/lib/; fi
+          if [ -f "utils.ts" ] && [ ! -f "src/lib/utils.ts" ]; then mv utils.ts src/lib/; fi
+          if [ -f "src/utils.ts" ] && [ ! -f "src/lib/utils.ts" ]; then mv src/utils.ts src/lib/; fi
+          for f in *.tsx; do
+            if [ -f "$f" ] && [ "$f" != "main.tsx" ] && [ "$f" != "App.tsx" ]; then
+              mv "$f" src/components/
+            fi
+          done
+
+
+      - name: Sanitize text files (strip UTF-16 / null bytes)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          skip_dirs = {'node_modules', 'dist', 'dist_electron', '.git', 'android', 'ios', 'build'}
+          text_ext = {'.ts', '.tsx', '.js', '.cjs', '.mjs', '.json', '.html', '.css', '.md', '.svg', '.bat', '.yml', '.yaml', '.txt', '.d.ts'}
+          special = {'.gitignore', '.env.example', 'Dockerfile'}
+
+          def fix(path: Path):
+              raw = path.read_bytes()
+              if not raw:
+                  return False
+              if path.suffix.lower() not in text_ext and path.name not in special:
+                  # also fix files named tsconfig / vite without relying only on suffix
+                  if path.name not in ('tsconfig.json', 'package.json', 'capacitor.config.json', 'manifest.json', 'metadata.json'):
+                      if path.suffix.lower() not in text_ext:
+                          return False
+              text = None
+              if raw.startswith(b'\xff\xfe'):
+                  text = raw.decode('utf-16-le')
+              elif raw.startswith(b'\xfe\xff'):
+                  text = raw.decode('utf-16-be')
+              elif b'\x00' in raw:
+                  try:
+                      text = raw.decode('utf-16-le')
+                  except Exception:
+                      try:
+                          text = raw.decode('utf-16-be')
+                      except Exception:
+                          text = raw.replace(b'\x00', b'').decode('utf-8', errors='replace')
+              else:
+                  return False
+              if text.startswith('\ufeff'):
+                  text = text.lstrip('\ufeff')
+              text = text.replace('\r\n', '\n').replace('\r', '\n')
+              path.write_bytes(text.encode('utf-8'))
+              print('fixed', path)
+              return True
+
+          for root, dirs, files in os.walk('.'):
+              dirs[:] = [d for d in dirs if d not in skip_dirs]
+              for name in files:
+                  p = Path(root) / name
+                  try:
+                      fix(p)
+                  except Exception as e:
+                      print('skip', p, e)
+          # verify critical
+          for crit in ['tsconfig.json', 'vite.config.ts', 'package.json']:
+              b = Path(crit).read_bytes()
+              if b'\x00' in b:
+                  raise SystemExit(f'CRITICAL still corrupt: {crit}')
+              print(crit, 'OK', len(b), 'bytes')
+          PY
+
+      - name: Build Web Application (includes icon generation)
+        run: npm run build
+
+      - name: Verify Windows Icon
+        shell: bash
+        run: |
+          if [ ! -f "build/icon.ico" ]; then
+            echo "ERROR: build/icon.ico missing after generate-icons"
+            ls -la build/ || true
+            exit 1
+          fi
+          # Validate ICO magic bytes with node (hexdump not available on Windows runners)
+          node -e "
+            const fs = require('fs');
+            const b = fs.readFileSync('build/icon.ico');
+            console.log('icon.ico size:', b.length, 'bytes');
+            console.log('header:', b.slice(0, 6).toString('hex'));
+            if (b[0] !== 0 || b[1] !== 0 || b[2] !== 1 || b[3] !== 0) {
+              console.error('Invalid ICO header');
+              process.exit(1);
+            }
+            console.log('ICO header OK, image count:', b[4] + (b[5] << 8));
+          "
+          ls -la build/
+
+      - name: Install Electron Dependencies
+        run: npm install --save-dev electron electron-builder
+
+      - name: Build Windows Executable
+        run: npx electron-builder --windows --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows EXE Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Painite-Work-Windows-EXE
+          path: |
+            dist_electron/*.exe
+            dist/*.exe
