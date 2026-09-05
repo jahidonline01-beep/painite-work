@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* ─── Painite Work Premium Theme ─── */
+:root {
+  --pw-bg: #07060c;
+  --pw-bg-elevated: #0f0d18;
+  --pw-surface: rgba(18, 14, 28, 0.92);
+  --pw-border: rgba(251, 191, 36, 0.12);
+  --pw-border-strong: rgba(251, 191, 36, 0.28);
+  --pw-gold: #fbbf24;
+  --pw-gold-soft: #fde68a;
+  --pw-rose: #fb7185;
+  --pw-violet: #a78bfa;
+  --pw-sky: #38bdf8;
+  --pw-text: #f1f5f9;
+  --pw-muted: #94a3b8;
+  --pw-glow: 0 0 40px rgba(251, 191, 36, 0.08);
+  color-scheme: dark;
+}
+
+html.light,
+[data-theme="light"] {
+  --pw-bg: #f8f6f2;
+  --pw-bg-elevated: #ffffff;
+  --pw-surface: rgba(255, 255, 255, 0.95);
+  --pw-border: rgba(180, 83, 9, 0.15);
+  --pw-border-strong: rgba(180, 83, 9, 0.3);
+  --pw-text: #1c1917;
+  --pw-muted: #78716c;
+  --pw-glow: 0 4px 24px rgba(180, 83, 9, 0.06);
+  color-scheme: light;
+}
+
+/* electron-boot */
+html, body {
+  min-height: 100%;
+  background-color: #07060c;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(251, 191, 36, 0.07), transparent 50%),
+    radial-gradient(ellipse 80% 50% at 100% 50%, rgba(168, 85, 247, 0.05), transparent 45%),
+    radial-gradient(ellipse 60% 40% at 0% 80%, rgba(244, 63, 94, 0.04), transparent 40%),
+    var(--pw-bg);
+  color: var(--pw-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Text selection */
+html, body, #root {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+input, textarea, select, button, [contenteditable="true"] {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Premium scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(251, 191, 36, 0.25);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(251, 191, 36, 0.45);
+}
+
+/* Focus rings */
+:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.5);
+  outline-offset: 2px;
+}
+
+/* Smooth transitions for interactive surfaces */
+button, a, input, textarea, select {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+/* Utility: premium card glass */
+.pw-glass {
+  background: var(--pw-surface);
+  border: 1px solid var(--pw-border);
+  box-shadow: var(--pw-glow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.pw-title-gradient {
+  background: linear-gradient(105deg, #fde68a 0%, #fb7185 45%, #c4b5fd 75%, #7dd3fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+
+/* force-dark-login: always dark surfaces for auth card */
+html, body {
+  color-scheme: dark;
+}

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Painite Work">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0612"/>
+      <stop offset="50%" stop-color="#12081c"/>
+      <stop offset="100%" stop-color="#07040e"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="40%" stop-color="#f43f5e"/>
+      <stop offset="70%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="gem" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#fecdd3"/>
+      <stop offset="25%" stop-color="#fb7185"/>
+      <stop offset="55%" stop-color="#be123c"/>
+      <stop offset="100%" stop-color="#4c0519"/>
+    </linearGradient>
+    <linearGradient id="facetL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="url(#ring)" stroke-width="10" opacity="0.95"/>
+  <circle cx="256" cy="256" r="218" fill="none" stroke="#fbbf24" stroke-width="1.5" opacity="0.35"/>
+  <g filter="url(#glow)" transform="translate(256 232)">
+    <polygon points="0,-88 76,-44 76,44 0,88 -76,44 -76,-44" fill="url(#gem)"/>
+    <polygon points="0,-88 76,-44 0,0" fill="url(#facetL)" opacity="0.45"/>
+    <polygon points="0,-88 -76,-44 0,0" fill="#fff" opacity="0.12"/>
+    <polygon points="76,-44 76,44 0,0" fill="#000" opacity="0.18"/>
+    <polygon points="-76,-44 -76,44 0,0" fill="#fff" opacity="0.08"/>
+    <polygon points="0,0 76,44 0,88 -76,44" fill="#000" opacity="0.22"/>
+    <circle cx="0" cy="-8" r="10" fill="#fff" opacity="0.55"/>
+    <circle cx="0" cy="-8" r="4" fill="#fef3c7"/>
+  </g>
+  <rect x="156" y="348" width="200" height="36" rx="18" fill="url(#gold)" opacity="0.95"/>
+  <text x="256" y="373" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="18" font-weight="700" letter-spacing="4" fill="#1c0a05">PAINITE</text>
+</svg>
